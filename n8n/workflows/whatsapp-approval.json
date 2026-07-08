@@ -1,0 +1,138 @@
+{
+  "name": "PolSim — WhatsApp Approval (Fonnte)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Approval via WhatsApp (opsional)\n1. Set webhook Fonnte ke URL webhook workflow ini.\n2. Isi credential **PolSim Fonnte** (header `Authorization: <token Fonnte>`) pada node kirim balasan — sengaja dibiarkan kosong.\n3. Format perintah dari admin: `SETUJU <pending_id>` atau `TOLAK <pending_id>`.\n4. Amankan: cocokkan nomor pengirim dengan daftar ADMIN_WA di node Parse.",
+        "height": 180,
+        "width": 340
+      },
+      "id": "polsim-wa-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-460, -220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "polsim-wa-approval",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "polsim-wa-webhook",
+      "name": "Webhook Fonnte",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-440, 0],
+      "webhookId": "polsim-wa-approval"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse payload Fonnte: {device, sender, message, ...}\n// GANTI daftar nomor admin di bawah sebelum mengaktifkan.\nconst ADMIN_WA = ['62xxxxxxxxxxx'];\nconst body = $json.body ?? $json;\nconst sender = String(body.sender ?? '');\nconst message = String(body.message ?? '').trim();\nconst m = message.match(/^(SETUJU|TOLAK)\\s+([0-9a-f-]{36})$/i);\nif (!ADMIN_WA.includes(sender) || !m) {\n  return { json: { valid: false, sender, reply: 'Perintah tidak dikenali. Format: SETUJU <id> atau TOLAK <id>' } };\n}\nreturn { json: { valid: true, sender, approve: m[1].toUpperCase() === 'SETUJU', pending_id: m[2] } };"
+      },
+      "id": "polsim-wa-parse",
+      "name": "Parse Perintah",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "polsim-wa-if",
+      "name": "Perintah Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nkqfdrgggrdwzseglyjm.supabase.co/rest/v1/rpc/admin_review_pending_event",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Profile", "value": "polsim" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_pending_id: $json.pending_id, p_approve: $json.approve }) }}",
+        "options": {}
+      },
+      "id": "polsim-wa-review",
+      "name": "Supabase: Review Event (RPC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, -80],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Supabase Service Role" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.fonnte.com/send",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ target: $('Parse Perintah').item.json.sender, message: 'PolSim: event ' + ($('Parse Perintah').item.json.approve ? 'DISETUJUI & tayang' : 'DITOLAK') + ' — ' + $('Parse Perintah').item.json.pending_id }) }}",
+        "options": {}
+      },
+      "id": "polsim-wa-reply",
+      "name": "Fonnte: Kirim Konfirmasi",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, -80],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Fonnte" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": {}
+      },
+      "id": "polsim-wa-respond",
+      "name": "Respond Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 0]
+    }
+  ],
+  "connections": {
+    "Webhook Fonnte": { "main": [[{ "node": "Parse Perintah", "type": "main", "index": 0 }]] },
+    "Parse Perintah": { "main": [[{ "node": "Perintah Valid?", "type": "main", "index": 0 }]] },
+    "Perintah Valid?": {
+      "main": [
+        [{ "node": "Supabase: Review Event (RPC)", "type": "main", "index": 0 }],
+        [{ "node": "Respond Webhook", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supabase: Review Event (RPC)": {
+      "main": [[{ "node": "Fonnte: Kirim Konfirmasi", "type": "main", "index": 0 }]]
+    },
+    "Fonnte: Kirim Konfirmasi": {
+      "main": [[{ "node": "Respond Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {}
+}
