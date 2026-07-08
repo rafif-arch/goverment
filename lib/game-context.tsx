@@ -38,6 +38,8 @@ export interface CampaignState {
   faction_standing: Record<string, number>;
   term_day: number;
   pembangunan_score: number;
+  apbd_total: number;
+  apbd_sisa: number;
   is_active: boolean;
 }
 
@@ -84,6 +86,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const supabase = getSupabase();
+    // auto-redeem kode referral dari link ajakan (sekali; apa pun hasilnya jangan diulang)
+    try {
+      const ref = localStorage.getItem("polsim_ref");
+      if (ref) {
+        localStorage.removeItem("polsim_ref");
+        await supabase.rpc("redeem_referral", { p_code: ref });
+      }
+    } catch {}
     const [cs, wallet, subs, admin] = await Promise.all([
       supabase
         .from("campaign_state")

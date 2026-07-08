@@ -91,6 +91,7 @@ export default function CommandCenterPage() {
   const [error, setError] = useState<string | null>(null);
   const [finalScore, setFinalScore] = useState<Record<string, number> | null>(null);
   const [nightMode, setNightMode] = useState(false); // testing hook utk rule jam_tidak_wajar
+  const [hasOttArt, setHasOttArt] = useState(true);
   const [worldTrends, setWorldTrends] = useState<Array<{ id: string; title: string; effects: { sektor?: string; efek_variabel?: Record<string, number> } }>>([]);
 
   const loadAll = useCallback(async () => {
@@ -185,6 +186,7 @@ export default function CommandCenterPage() {
     if (error) {
       if (error.message.includes("PERLU_LOBI_DPRD")) setLobiProject(p);
       else if (error.message.includes("TOKEN_TIDAK_CUKUP")) setError("Token kebijakan habis — klaim jatah harian atau top-up di Toko.");
+      else if (error.message.includes("APBD_TIDAK_CUKUP")) setError("Sisa APBD tidak cukup untuk anggaran proyek ini. Kecilkan RAB atau akhiri masa jabatan.");
       else setError(error.message);
     }
     await Promise.all([refresh(), loadAll()]);
@@ -240,6 +242,16 @@ export default function CommandCenterPage() {
   if (campaign.current_stage === "game_over") {
     return (
       <div className="theme-command-center fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
+        {hasOttArt && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src="/ott.webp"
+            alt=""
+            aria-hidden
+            onError={() => setHasOttArt(false)}
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-25"
+          />
+        )}
         <motion.div
           initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.15 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -308,7 +320,7 @@ export default function CommandCenterPage() {
             {[
               { label: "Political Power", value: campaign.political_power, warn: powerLow },
               { label: "Kepercayaan", value: character?.kepercayaan_publik ?? 0 },
-              { label: "Uang (jt Ʀ)", value: character?.uang ?? 0 },
+              { label: "Dana Taktis (jt Ʀ)", value: campaign.dana_kampanye },
               { label: "Pembangunan", value: campaign.pembangunan_score },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-white/5 px-3 py-2">
@@ -320,6 +332,28 @@ export default function CommandCenterPage() {
             ))}
           </div>
         </header>
+
+        {/* APBD — alokasi belanja pembangunan (dari pendapatan daerah BPS-flavored) */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex items-baseline justify-between">
+            <p className="text-[11px] uppercase tracking-widest text-white/50">💰 APBD Belanja Pembangunan</p>
+            <p className="text-sm font-black tabular-nums">
+              <span className="text-signal-gold"><StatCount value={campaign.apbd_sisa} /></span>
+              <span className="text-white/40"> / {Number(campaign.apbd_total).toLocaleString("id-ID")} jt Ʀ</span>
+            </p>
+          </div>
+          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/10">
+            <motion.div
+              className="h-full origin-left rounded-full bg-gradient-to-r from-emerald-400 to-signal-gold"
+              initial={false}
+              animate={{ scaleX: campaign.apbd_total > 0 ? campaign.apbd_sisa / campaign.apbd_total : 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-white/40">
+            Setiap proyek memotong APBD. Selisih markup RAB &quot;mampir&quot; ke Dana Taktis — Komisi Integritas juga tahu itu.
+          </p>
+        </div>
 
         {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
 
@@ -409,9 +443,12 @@ export default function CommandCenterPage() {
                             className="mt-1 w-full accent-amber-400"
                           />
                           <span className="text-[11px] font-normal text-white/45">
-                            Anggaran diajukan: {anggaran.toLocaleString("id-ID")} jt Ʀ.
-                            {formMarkup > 20 && " ⚠ Markup >20% berisiko flag audit."}
-                            {formMarkup > 0 && formMarkup <= 20 && " Sisa markup masuk 'dana taktis' (dana kampanye)."}
+                            Anggaran diajukan: {anggaran.toLocaleString("id-ID")} jt Ʀ
+                            {selectedIsu && formMarkup > 0 && (
+                              <> · <b className="text-signal-gold">+{(anggaran - selectedIsu.base_cost).toLocaleString("id-ID")} jt Ʀ masuk Dana Taktis</b></>
+                            )}
+                            .{formMarkup > 20 && " ⚠ Markup >20% berisiko flag audit."}
+                            {anggaran > campaign.apbd_sisa && " 🚫 Melebihi sisa APBD!"}
                           </span>
                         </label>
                         <div className="text-xs font-semibold text-white/70">
@@ -435,7 +472,7 @@ export default function CommandCenterPage() {
                         </div>
                         <button
                           onClick={createProject}
-                          disabled={busy || !formVendor}
+                          disabled={busy || !formVendor || anggaran > campaign.apbd_sisa}
                           className="w-full rounded-xl bg-signal-gold px-4 py-3 text-sm font-black text-black disabled:opacity-40"
                         >
                           📑 Ajukan Proyek

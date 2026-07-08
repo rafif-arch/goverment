@@ -29,18 +29,54 @@ export default function ShopPage() {
   const [owned, setOwned] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [refInfo, setRefInfo] = useState<{ code: string; invited: number; already_redeemed: boolean; bonus: number } | null>(null);
+  const [redeemCode, setRedeemCode] = useState("");
 
   const load = useCallback(async () => {
     const supabase = getSupabase();
-    const [c, o] = await Promise.all([
+    const [c, o, r] = await Promise.all([
       supabase.from("cosmetic_items").select("*").order("harga_token"),
       supabase.from("user_cosmetics").select("cosmetic_item_id, equipped"),
+      supabase.rpc("get_my_referral"),
     ]);
     setCosmetics((c.data as CosmeticRow[]) ?? []);
     const map: Record<string, boolean> = {};
     for (const row of (o.data as OwnedRow[]) ?? []) map[row.cosmetic_item_id] = row.equipped;
     setOwned(map);
+    if (r.data) setRefInfo(r.data);
   }, []);
+
+  async function shareReferral() {
+    if (!refInfo) return;
+    const url = `${window.location.origin}/?ref=${refInfo.code}`;
+    const text = `Aku lagi jadi kepala daerah di PolSim Arcapada 🏛️ — simulator politik satire. Daftar pakai kodeku "${refInfo.code}", kita berdua dapat ${refInfo.bonus} token gratis: ${url}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "PolSim Arcapada", text, url });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setMsg("Link ajakan disalin ke clipboard — tinggal tempel ke chat temanmu!");
+      }
+    } catch {}
+  }
+
+  async function redeemReferral() {
+    if (!redeemCode.trim()) return;
+    setBusy("redeem");
+    const { data, error } = await getSupabase().rpc("redeem_referral", { p_code: redeemCode.trim() });
+    if (error) {
+      const m = error.message.includes("SUDAH_PERNAH")
+        ? "Kamu sudah pernah memakai kode teman."
+        : error.message.includes("KODE_SENDIRI")
+          ? "Itu kodemu sendiri 😅"
+          : "Kode tidak ditemukan.";
+      setMsg(m);
+    } else {
+      setMsg(`🎉 Berhasil! +${data?.bonus ?? 15} token untukmu dan temanmu.`);
+    }
+    setBusy(null);
+    await Promise.all([refresh(), load()]);
+  }
 
   useEffect(() => {
     if (session) load();
@@ -111,6 +147,45 @@ export default function ShopPage() {
         <p className="rounded-lg bg-black/5 px-3 py-2 text-xs text-black/50">
           Memuat Midtrans Snap… (butuh NEXT_PUBLIC_MIDTRANS_CLIENT_KEY sandbox)
         </p>
+      )}
+
+      {/* Referral */}
+      {refInfo && (
+        <section className="panel border-2 border-emerald-300/70 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="font-bold">🤝 Ajak Teman, Sama-sama Dapat {refInfo.bonus} Token</h2>
+              <p className="mt-1 text-sm text-black/60">
+                Kodemu: <b className="rounded bg-black/5 px-2 py-0.5 font-mono text-base tracking-widest">{refInfo.code}</b>
+                {" · "}
+                <span className="text-emerald-700 font-semibold">{refInfo.invited} teman bergabung</span>
+              </p>
+            </div>
+            <button
+              onClick={shareReferral}
+              className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white"
+            >
+              📤 Bagikan Link Ajakan
+            </button>
+          </div>
+          {!refInfo.already_redeemed && (
+            <div className="mt-3 flex gap-2">
+              <input
+                value={redeemCode}
+                onChange={(e) => setRedeemCode(e.target.value)}
+                placeholder="Punya kode teman? Masukkan di sini"
+                className="flex-1 rounded-lg border border-black/15 px-3 py-2 text-sm font-mono"
+              />
+              <button
+                onClick={redeemReferral}
+                disabled={busy !== null}
+                className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+              >
+                Pakai
+              </button>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Token packs */}

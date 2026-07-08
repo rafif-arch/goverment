@@ -1,59 +1,86 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import AuthGate from "@/components/AuthGate";
 import { useGame } from "@/lib/game-context";
-
-const STEPS = [
-  { icon: "🗺️", title: "Babak I — Peta & Makro", desc: "Pelajari region, indikator ekonomi, dan 4 faksi masyarakat." },
-  { icon: "🧑‍💼", title: "Babak II — Karakter", desc: "Rakit kandidatmu. Hati-hati memilih penyandang dana." },
-  { icon: "📣", title: "Babak III — Kampanye", desc: "Tiket partai, calon wakil, perang elektabilitas, hari pemilihan." },
-  { icon: "🏛️", title: "Babak IV — Menjabat", desc: "Eksekusi proyek, hadapi sponsor... dan Komisi Integritas Arcapada." },
-];
+import { useI18n } from "@/lib/i18n";
 
 export default function Home() {
   const { session, loading, campaign } = useGame();
+  const { t } = useI18n();
   const reduced = useReducedMotion();
+  const [hasVideo, setHasVideo] = useState(true);
   const [hasHero, setHasHero] = useState(true);
+
+  // tangkap kode referral dari link ajakan (/?ref=KODE) — di-redeem otomatis setelah login
+  useEffect(() => {
+    try {
+      const ref = new URLSearchParams(window.location.search).get("ref");
+      if (ref) localStorage.setItem("polsim_ref", ref);
+    } catch {}
+  }, []);
+
+  const STEPS = [
+    { icon: "🗺️", title: t("landing.step1t"), desc: t("landing.step1d") },
+    { icon: "🧑‍💼", title: t("landing.step2t"), desc: t("landing.step2d") },
+    { icon: "📣", title: t("landing.step3t"), desc: t("landing.step3d") },
+    { icon: "🏛️", title: t("landing.step4t"), desc: t("landing.step4d") },
+  ];
 
   return (
     <div className="space-y-10 py-6">
-      {hasHero && (
+      {/* Teaser sinematik (AI-generated); fallback hero image; fallback teks */}
+      {(hasVideo || hasHero) && (
         <motion.div
           initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.02 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8 }}
-          className="overflow-hidden rounded-3xl shadow-elevate"
+          className="relative overflow-hidden rounded-3xl shadow-elevate"
         >
-          {/* hero art: /public/hero.webp (di-generate AI); disembunyikan bila belum ada */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/hero.webp"
-            alt="Panorama satire Republik Arcapada"
-            onError={() => setHasHero(false)}
-            className="max-h-72 w-full object-cover"
-          />
+          {hasVideo ? (
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              poster="/hero.webp"
+              onError={() => setHasVideo(false)}
+              className="max-h-80 w-full object-cover"
+            >
+              <source src="/teaser.mp4" type="video/mp4" />
+            </video>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/hero.webp"
+              alt="Panorama satire Republik Arcapada"
+              onError={() => setHasHero(false)}
+              className="max-h-80 w-full object-cover"
+            />
+          )}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+          <p className="pointer-events-none absolute bottom-3 left-4 text-sm font-bold text-white drop-shadow">
+            🏛️ Kota Candrakala — {t("landing.tagline")}
+          </p>
         </motion.div>
       )}
+
       <motion.section
         initial={reduced ? {} : { opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="text-center"
       >
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-700">Republik Arcapada</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-700">{t("landing.tagline")}</p>
         <h1 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">
-          Simulator Politik <span className="text-amber-600">&</span> Birokrasi
+          {t("landing.title1")} <span className="text-amber-600">&</span> {t("landing.title2")}
         </h1>
-        <p className="mx-auto mt-3 max-w-xl text-black/60">
-          Menang pemilu itu mudah. Bertahan dari audit — itu baru permainan.
-          Satire birokrasi di negara fiksi yang datanya terinspirasi statistik sungguhan.
-        </p>
+        <p className="mx-auto mt-3 max-w-xl text-black/60">{t("landing.subtitle")}</p>
       </motion.section>
 
       {loading ? (
-        <p className="text-center text-sm text-black/50">Memuat…</p>
+        <p className="text-center text-sm text-black/50">{t("common.loading")}</p>
       ) : session ? (
         <div className="mx-auto flex max-w-md flex-col items-center gap-3">
           {campaign ? (
@@ -61,18 +88,18 @@ export default function Home() {
               href={campaign.current_stage === "menjabat" || campaign.current_stage === "game_over" ? "/command-center" : "/kampanye"}
               className="w-full rounded-2xl bg-signal-gold px-6 py-4 text-center text-lg font-bold text-black shadow-glowGold"
             >
-              ▶ Lanjutkan Permainan
+              {t("landing.continue")}
             </Link>
           ) : (
             <Link
               href="/peta"
               className="w-full rounded-2xl bg-signal-gold px-6 py-4 text-center text-lg font-bold text-black shadow-glowGold"
             >
-              ▶ Mulai dari Peta Arcapada
+              {t("landing.start")}
             </Link>
           )}
           <Link href="/leaderboard" className="text-sm text-black/60 underline">
-            Lihat papan peringkat
+            {t("landing.viewboard")}
           </Link>
         </div>
       ) : (
@@ -96,10 +123,7 @@ export default function Home() {
         ))}
       </section>
 
-      <p className="text-center text-xs text-black/40">
-        Semua negara, kota, partai, tokoh, dan lembaga dalam game ini fiksi. Kemiripan dengan
-        entitas nyata adalah kebetulan statistik — persis seperti alasan pejabat di dalam game ini.
-      </p>
+      <p className="text-center text-xs text-black/40">{t("landing.disclaimer")}</p>
     </div>
   );
 }

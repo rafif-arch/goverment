@@ -31,6 +31,22 @@ interface Faction {
   icon: string;
 }
 
+// Ilustrasi region (AI-generated, /public/regions/<code>.webp) — sembunyi bila belum ada.
+function RegionArt({ code, name }: { code: string; name: string }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/regions/${code}.webp`}
+      alt={name}
+      loading="lazy"
+      onError={() => setOk(false)}
+      className="h-36 w-full rounded-xl object-cover"
+    />
+  );
+}
+
 export default function PetaPage() {
   const { session, loading, isVip, campaign } = useGame();
   const router = useRouter();
@@ -99,6 +115,7 @@ export default function PetaPage() {
               transition={{ duration: 0.3 }}
               className="panel space-y-4 p-5"
             >
+              <RegionArt code={region.code} name={region.name} />
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="text-lg font-bold">{region.name}</h2>
