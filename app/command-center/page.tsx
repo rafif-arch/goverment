@@ -71,7 +71,7 @@ const FACTION_META: Record<string, { name: string; icon: string }> = {
 };
 
 export default function CommandCenterPage() {
-  const { session, loading, character, campaign, refresh } = useGame();
+  const { session, loading, character, campaign, refresh, isVip } = useGame();
   const reduced = useReducedMotion();
 
   const [region, setRegion] = useState<RegionRow | null>(null);
@@ -91,6 +91,7 @@ export default function CommandCenterPage() {
   const [error, setError] = useState<string | null>(null);
   const [finalScore, setFinalScore] = useState<Record<string, number> | null>(null);
   const [nightMode, setNightMode] = useState(false); // testing hook utk rule jam_tidak_wajar
+  const [worldTrends, setWorldTrends] = useState<Array<{ id: string; title: string; effects: { sektor?: string; efek_variabel?: Record<string, number> } }>>([]);
 
   const loadAll = useCallback(async () => {
     if (!campaign) return;
@@ -119,6 +120,8 @@ export default function CommandCenterPage() {
       if (item?.tipe === "dekorasi_ruang") refs.push(item.asset_ref);
     }
     setEquippedDecor(refs);
+    const { data: trends } = await supabase.from("active_world_events").select("id, title, effects");
+    setWorldTrends((trends as typeof worldTrends) ?? []);
     if (campaign.current_stage === "game_over") {
       const { data: gol } = await supabase
         .from("game_over_log")
@@ -525,6 +528,38 @@ export default function CommandCenterPage() {
                   />
                 ))}
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-bold">
+                📡 Analisis Arah Dunia <span className="rounded-full bg-signal-gold/20 px-2 py-0.5 text-[10px] text-signal-gold">VIP</span>
+              </h3>
+              {isVip ? (
+                worldTrends.length > 0 ? (
+                  <ul className="space-y-2 text-xs text-white/75">
+                    {worldTrends.map((t) => (
+                      <li key={t.id} className="rounded-lg bg-white/5 px-3 py-2">
+                        <p className="font-semibold">{t.title}</p>
+                        <p className="mt-0.5 text-white/45">
+                          sektor {t.effects?.sektor ?? "-"}
+                          {t.effects?.efek_variabel?.inflasi_proyek
+                            ? ` · biaya proyek ${t.effects.efek_variabel.inflasi_proyek > 0 ? "naik" : "turun"} ${Math.abs(t.effects.efek_variabel.inflasi_proyek * 100).toFixed(0)}%`
+                            : ""}
+                          {t.effects?.efek_variabel?.sorotan_audit
+                            ? ` · sorotan audit +${t.effects.efek_variabel.sorotan_audit}`
+                            : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-white/40">Dunia sedang tenang. Intelijen Pusat ikut ngopi.</p>
+                )
+              ) : (
+                <a href="/shop" className="block rounded-lg bg-white/5 px-3 py-2 text-xs text-white/50 hover:bg-white/10">
+                  🔒 Ringkasan tren world events untuk pelanggan VIP — buka di Toko.
+                </a>
+              )}
             </div>
 
             {finalScore ? (
