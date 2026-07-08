@@ -66,7 +66,7 @@ async function fetchBpsVariable(
 
 async function collectRawValues(): Promise<RawValue[]> {
   const apiKey = process.env.BPS_API_KEY;
-  const fallback = fallbackJson as Record<string, Record<string, number>>;
+  const fallback = fallbackJson as unknown as Record<string, Record<string, number>>;
   const out: RawValue[] = [];
 
   for (const mapping of REGION_MAPPINGS) {

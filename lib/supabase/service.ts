@@ -1,8 +1,10 @@
 // Supabase client server-side. JANGAN diimpor dari kode client.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+type PolsimClient = SupabaseClient<any, "polsim", any>;
+
 /** Client service role — bypass RLS. Untuk webhook, admin endpoint, scripts. */
-export function createServiceClient(): SupabaseClient {
+export function createServiceClient(): PolsimClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
@@ -18,7 +20,7 @@ export function createServiceClient(): SupabaseClient {
  * Client dengan identitas user (Bearer token dari client) — tetap terkena RLS.
  * Dipakai route handler untuk memverifikasi & bertindak atas nama user.
  */
-export function createUserClient(accessToken: string): SupabaseClient {
+export function createUserClient(accessToken: string): PolsimClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) throw new Error("Env Supabase belum di-set.");
