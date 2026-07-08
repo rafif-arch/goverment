@@ -5,13 +5,40 @@ dan mencentang. Kode, schema, dan seed sudah beres — tidak ada yang perlu ditu
 
 ---
 
-## Langkah 0 — Salin template env (sekali)
+## Langkah 0 — Pilih mode: ONLINE (Vercel) atau lokal
+
+### 🌐 Mode ONLINE — semuanya di browser, tanpa install apa pun (disarankan)
+
+Tidak perlu `.env.local`, tidak perlu terminal, tidak perlu ngrok:
+
+- [ ] **0a.** Merge PR ini ke `main`.
+- [ ] **0b.** Buka https://vercel.com/new → **Import** repo `rafif-arch/goverment`
+      (login pakai akun GitHub; framework Next.js terdeteksi otomatis). **Jangan klik Deploy dulu.**
+- [ ] **0c.** Di layar import yang sama, buka bagian **Environment Variables** → isi
+      variabel berikut (nilainya kamu kumpulkan di Langkah 1–3 di bawah):
+      `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+      `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`, `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`,
+      `MIDTRANS_IS_PRODUCTION=false`, `BPS_API_KEY` (boleh kosong),
+      `NEXT_PUBLIC_APP_URL=https://<nama-proyek>.vercel.app`.
+- [ ] **0d.** Klik **Deploy** → dapat URL `https://<nama-proyek>.vercel.app` → game online. 🎉
+      (Ubah env belakangan: Project → Settings → Environment Variables → Save → **Redeploy**.)
+
+Di mode online, **lewati langkah 2b–2c (tunnel)** — Payment Notification URL Midtrans langsung
+diisi `https://<nama-proyek>.vercel.app/api/payment/webhook`.
+
+> Catatan: n8n-mu (Langkah 4) memang sudah online di VPS, dan database sudah online di Supabase —
+> jadi dengan Vercel, 100% sistem berjalan online.
+
+### 💻 Mode lokal — hanya kalau mau ngoding/utak-atik di PC
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env.local   # lalu isi <<...>> di dalamnya
+npm install && npm run dev   # http://localhost:3000
 ```
 
-> `.env.local` tidak akan pernah ter-commit (sudah di `.gitignore`).
+> `.env.local` hanya dipakai mode lokal dan tidak pernah ter-commit (sudah di `.gitignore`).
+> Semua instruksi "tempel ke `.env.local`" di bawah = "isi di form Environment Variables Vercel"
+> bila kamu memakai mode online.
 
 ---
 
@@ -54,12 +81,15 @@ Project: **Enterprise Asset Management** (`nkqfdrgggrdwzseglyjm`) — sudah beri
       NEXT_PUBLIC_MIDTRANS_CLIENT_KEY=<<SB-Mid-client-... (sama dgn atas)>>
       MIDTRANS_IS_PRODUCTION=false
       ```
-- [ ] **2b.** Supaya webhook sampai ke laptopmu, buka tunnel:
+- [ ] **2b.** *(Mode lokal saja — online lewati)* buka tunnel supaya webhook sampai ke laptop:
       ```bash
-      npx ngrok http 3000   # atau cloudflared tunnel --url http://localhost:3000
+      npx ngrok http 3000
       ```
 - [ ] **2c.** Dashboard sandbox → **Settings → Configuration → Payment Notification URL**:
       ```
+      # mode online:
+      https://<nama-proyek>.vercel.app/api/payment/webhook
+      # mode lokal:
       https://<<URL_TUNNEL_KAMU>>/api/payment/webhook
       ```
 
@@ -115,12 +145,11 @@ Project: **Enterprise Asset Management** (`nkqfdrgggrdwzseglyjm`) — sudah beri
 
 ---
 
-## Langkah 5 — (Opsional) Deploy Vercel
+## Langkah 5 — Verifikasi online end-to-end
 
-- [ ] Import repo di https://vercel.com/new → framework Next.js terdeteksi otomatis.
-- [ ] Salin SEMUA isi `.env.local` ke **Project Settings → Environment Variables**.
-- [ ] Update `NEXT_PUBLIC_APP_URL` ke domain Vercel + ganti Payment Notification URL Midtrans
-      ke `https://<domain>/api/payment/webhook` (tidak perlu tunnel lagi).
+- [ ] Buka `https://<nama-proyek>.vercel.app` → daftar akun → `/peta` menampilkan 5 region.
+- [ ] Jalankan SQL admin (Langkah 1e) dengan email akun barumu → menu 🛡️ Review Berita muncul.
+- [ ] `/shop` → beli paket token → bayar kartu test → saldo bertambah (webhook sudah ke domain Vercel).
 
 ---
 
