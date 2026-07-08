@@ -1,0 +1,193 @@
+{
+  "name": "PolSim — Daily News Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "days", "triggerAtHour": 6, "triggerAtMinute": 0 }]
+        }
+      },
+      "id": "polsim-news-schedule",
+      "name": "Schedule 1x/hari 06:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-460, 0]
+    },
+    {
+      "parameters": { "url": "https://www.antaranews.com/rss/terkini.xml", "options": {} },
+      "id": "polsim-rss-antara",
+      "name": "RSS Antara",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [-240, -160]
+    },
+    {
+      "parameters": { "url": "https://www.cnnindonesia.com/nasional/rss", "options": {} },
+      "id": "polsim-rss-cnn",
+      "name": "RSS CNN Indonesia",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [-240, 0]
+    },
+    {
+      "parameters": { "url": "https://rss.tempo.co/nasional", "options": {} },
+      "id": "polsim-rss-tempo",
+      "name": "RSS Tempo",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [-240, 160]
+    },
+    {
+      "parameters": { "numberInputs": 3 },
+      "id": "polsim-merge-feeds",
+      "name": "Gabung Feed",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [-20, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalisasi + filter relevansi + dedup + batasi 5 berita/hari.\nconst KEYWORDS = ['harga','pangan','beras','ekonomi','anggaran','infrastruktur','banjir','subsidi','bbm','listrik','pajak','buruh','upah','petani','nelayan','kesehatan','pendidikan','digital','internet','tambang','lingkungan','inflasi','umkm'];\nfunction hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(16);}\nconst seen = new Set();\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json;\n  const headline = (j.title || '').trim();\n  if (!headline) continue;\n  const summary = (j.contentSnippet || j.content || j.description || '').toString().replace(/<[^>]+>/g,'').slice(0, 400);\n  const lower = (headline + ' ' + summary).toLowerCase();\n  if (!KEYWORDS.some(k => lower.includes(k))) continue;\n  const content_hash = hash(headline.toLowerCase());\n  if (seen.has(content_hash)) continue;\n  seen.add(content_hash);\n  out.push({ json: { headline, summary, source_url: j.link || '', source_name: (j.creator || j.author || new URL(j.link||'https://x.invalid').hostname), published_at: j.isoDate || j.pubDate || new Date().toISOString(), content_hash } });\n  if (out.length >= 5) break;\n}\nreturn out;"
+      },
+      "id": "polsim-filter-dedup",
+      "name": "Filter & Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nkqfdrgggrdwzseglyjm.supabase.co/rest/v1/news_raw?on_conflict=content_hash",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Profile", "value": "polsim" },
+            { "name": "Prefer", "value": "return=representation,resolution=ignore-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ headline: $json.headline, summary: $json.summary, source_url: $json.source_url, source_name: $json.source_name, published_at: $json.published_at, content_hash: $json.content_hash }) }}",
+        "options": { "response": { "response": { "neverError": false } } }
+      },
+      "id": "polsim-insert-news",
+      "name": "Supabase: Simpan Berita",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 0],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Supabase Service Role" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "anthropic-version", "value": "2023-06-01" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1024, temperature: 0.4, system: \"Kamu adalah 'Penerjemah Dunia' untuk game simulasi politik satire berlatar negara FIKSI bernama Republik Arcapada. Tugasmu: membaca ringkasan berita dunia nyata dari Indonesia, lalu memetakan DAMPAK SISTEMIKNYA ke dalam dunia game. ATURAN KERAS: 1. JANGAN PERNAH menyebut nama orang, partai politik, perusahaan, lembaga, kota, atau tempat dunia nyata di dalam output. 2. Petakan berita HANYA ke efek sektor/axis (pangan, energi, infrastruktur, ketenagakerjaan, kesehatan, pendidikan, lingkungan, kelautan, keamanan, digital) dan sentimen faksi — JANGAN ke tokoh/partai fiksi yang mencerminkan tokoh/partai riil dalam berita. 3. Berita proses hukum orang tertentu: ambil efek sistemiknya saja. 4. Narasi in-game: bahasa Indonesia, konteks Republik Arcapada, satire ringan, maksimal 2 kalimat. 5. Berita tidak relevan (gosip/olahraga/selebriti): relevan=false. Faksi (kode): buruh_tani, menengah_urban, tokoh_agama, konsorsium_bisnis; efek -8..+8, pakai 1-3 faksi. Efek variabel: inflasi_proyek (-0.1..0.2), sentimen_publik (-5..5), sorotan_audit (0..10). Balas HANYA JSON valid: {\\\"relevan\\\":true,\\\"sektor\\\":\\\"...\\\",\\\"ringkasan_netral\\\":\\\"...\\\",\\\"efek_faksi\\\":{},\\\"efek_variabel\\\":{},\\\"draft_narasi_in_game\\\":\\\"...\\\",\\\"judul_in_game\\\":\\\"...\\\",\\\"duration_days\\\":7} — sumber kebenaran prompt: /n8n/prompts/news-interpreter.md\", messages: [{ role: 'user', content: 'Berikut berita hari ini (headline + ringkasan RSS):\\n\\n' + ($json.headline || $json[0]?.headline) + '\\n' + ($json.summary || $json[0]?.summary || '') + '\\n\\nPetakan ke efek dunia Republik Arcapada sesuai aturan.' }] }) }}",
+        "options": {}
+      },
+      "id": "polsim-anthropic",
+      "name": "Anthropic: Interpretasi",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 0],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Anthropic API" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse output Claude → baris pending_events. Buang yang tidak relevan/invalid.\nconst resp = $json;\nlet text = '';\ntry { text = resp.content?.[0]?.text ?? ''; } catch (e) { text = ''; }\nlet parsed = null;\ntry { parsed = JSON.parse(text.replace(/^```json?\\s*/i, '').replace(/```\\s*$/,'').trim()); } catch (e) { parsed = null; }\nif (!parsed || parsed.relevan === false) { return { json: { skip: true } }; }\nconst newsRow = $('Supabase: Simpan Berita').item.json;\nconst news = Array.isArray(newsRow) ? newsRow[0] : newsRow;\nif (!news || !news.id) { return { json: { skip: true } }; }\nreturn { json: {\n  news_raw_id: news.id,\n  ai_interpretation: parsed,\n  draft_event: {\n    title: parsed.judul_in_game || 'Kabar Arcapada',\n    narasi: parsed.draft_narasi_in_game || parsed.ringkasan_netral || '',\n    effects: { sektor: parsed.sektor, efek_faksi: parsed.efek_faksi || {}, efek_variabel: parsed.efek_variabel || {} },\n    duration_days: parsed.duration_days || 7\n  },\n  skip: false\n} };"
+      },
+      "id": "polsim-parse",
+      "name": "Parse Interpretasi",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "polsim-if-valid",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1080, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nkqfdrgggrdwzseglyjm.supabase.co/rest/v1/pending_events",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Profile", "value": "polsim" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ news_raw_id: $json.news_raw_id, ai_interpretation: $json.ai_interpretation, draft_event: $json.draft_event, status: 'pending' }) }}",
+        "options": {}
+      },
+      "id": "polsim-insert-pending",
+      "name": "Supabase: Antrikan utk Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, -80],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Supabase Service Role" }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule 1x/hari 06:00": {
+      "main": [
+        [
+          { "node": "RSS Antara", "type": "main", "index": 0 },
+          { "node": "RSS CNN Indonesia", "type": "main", "index": 0 },
+          { "node": "RSS Tempo", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "RSS Antara": { "main": [[{ "node": "Gabung Feed", "type": "main", "index": 0 }]] },
+    "RSS CNN Indonesia": { "main": [[{ "node": "Gabung Feed", "type": "main", "index": 1 }]] },
+    "RSS Tempo": { "main": [[{ "node": "Gabung Feed", "type": "main", "index": 2 }]] },
+    "Gabung Feed": { "main": [[{ "node": "Filter & Dedup", "type": "main", "index": 0 }]] },
+    "Filter & Dedup": { "main": [[{ "node": "Supabase: Simpan Berita", "type": "main", "index": 0 }]] },
+    "Supabase: Simpan Berita": { "main": [[{ "node": "Anthropic: Interpretasi", "type": "main", "index": 0 }]] },
+    "Anthropic: Interpretasi": { "main": [[{ "node": "Parse Interpretasi", "type": "main", "index": 0 }]] },
+    "Parse Interpretasi": { "main": [[{ "node": "Valid?", "type": "main", "index": 0 }]] },
+    "Valid?": { "main": [[{ "node": "Supabase: Antrikan utk Review", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {}
+}

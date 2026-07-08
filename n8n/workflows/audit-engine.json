@@ -1,0 +1,83 @@
+{
+  "name": "PolSim — Audit Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] }
+      },
+      "id": "polsim-audit-schedule",
+      "name": "Schedule tiap 6 jam",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nkqfdrgggrdwzseglyjm.supabase.co/rest/v1/rpc/run_audit_engine",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Profile", "value": "polsim" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "id": "polsim-audit-rpc",
+      "name": "Jalankan Audit Engine (RPC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [40, 0],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Supabase Service Role" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.game_overs }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "polsim-audit-if-ott",
+      "name": "Ada OTT?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Notifikasi OTT (opsional)\nSambungkan output true dari **Ada OTT?** ke kanal notifikasi pilihanmu (Telegram/Slack/WhatsApp).\nHasil RPC: `{campaigns_audited, flags_added, game_overs}`.",
+        "height": 120,
+        "width": 300
+      },
+      "id": "polsim-audit-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [480, -60]
+    }
+  ],
+  "connections": {
+    "Schedule tiap 6 jam": {
+      "main": [[{ "node": "Jalankan Audit Engine (RPC)", "type": "main", "index": 0 }]]
+    },
+    "Jalankan Audit Engine (RPC)": {
+      "main": [[{ "node": "Ada OTT?", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {}
+}

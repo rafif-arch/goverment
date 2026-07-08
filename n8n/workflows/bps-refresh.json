@@ -1,0 +1,111 @@
+{
+  "name": "PolSim — BPS Refresh",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "weeks", "triggerAtDay": [1], "triggerAtHour": 5 }] }
+      },
+      "id": "polsim-bps-schedule",
+      "name": "Schedule mingguan (Senin 05:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-420, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Daftar permintaan BPS: 3 indikator (var id) — samakan dengan /data/region-mapping.ts.\n// BPS_API_KEY diambil dari env n8n (set di instance: BPS_API_KEY=...).\nconst key = $env.BPS_API_KEY;\nif (!key) throw new Error('Env BPS_API_KEY belum di-set di instance n8n');\nconst VARS = [\n  { indikator: 'ipm', varId: 414, clamp: [40, 95] },\n  { indikator: 'gini_ratio', varId: 370, clamp: [0.2, 0.6] },\n  { indikator: 'tingkat_pengangguran', varId: 543, clamp: [1, 20] },\n];\nreturn VARS.map(v => ({ json: { ...v, url: `https://webapi.bps.go.id/v1/api/list/model/data/domain/0000/var/${v.varId}/key/${key}/` } }));"
+      },
+      "id": "polsim-bps-vars",
+      "name": "Daftar Indikator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-200, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "polsim-bps-fetch",
+      "name": "BPS Web API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [20, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Transformasi fiksi deterministik — port dari /lib/bps-transform.ts (jaga sinkron!).\nconst MAPPINGS = [\n  { regionCode: 'candrakala', prov: '31' },\n  { regionCode: 'lembah_sarna', prov: '33' },\n  { regionCode: 'kutabara', prov: '64' },\n  { regionCode: 'tirtagati', prov: '71' },\n  { regionCode: 'argasoka', prov: '34' },\n];\nfunction hashString(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193);}return h>>>0;}\nfunction mulberry32(seed){let a=seed>>>0;return()=>{a|=0;a=(a+0x6d2b79f5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}\nfunction noiseMult(key){const rng=mulberry32(hashString(key));const mag=0.05+rng()*0.10;const sign=rng()<0.5?-1:1;return 1+sign*mag;}\nfunction transform(value, regionCode, indikator, periode, clamp){const noisy=value*noiseMult(`${regionCode}|${indikator}|${periode}`);const v=Math.min(clamp[1],Math.max(clamp[0],noisy));return Math.round(v*100)/100;}\n\nconst regionPatches = {}; const rawRows = [];\n// $input.all() berisi respons BPS berurutan sesuai item 'Daftar Indikator'\nconst reqs = $('Daftar Indikator').all();\nconst resps = $input.all();\nfor (let i = 0; i < resps.length; i++) {\n  const meta = reqs[i].json;\n  const body = resps[i].json;\n  if (!body || body.status !== 'OK' || !body.datacontent) continue;\n  const vervar = body.vervar || []; const tahun = (body.tahun || []).slice().sort((a,b)=>Number(b.val)-Number(a.val));\n  const turvar = body.turvar?.[0]?.val ?? 0; const turth = body.turtahun?.[0]?.val ?? 0;\n  for (const m of MAPPINGS) {\n    const wilayah = vervar.find(v => String(v.val).startsWith(m.prov));\n    if (!wilayah) continue;\n    let found = null;\n    for (const th of tahun) {\n      const key = `${wilayah.val}${meta.varId}${turvar}${th.val}${turth}`;\n      const nilai = body.datacontent[key];\n      if (typeof nilai === 'number' && isFinite(nilai)) { found = { nilai, periode: String(th.label ?? th.val) }; break; }\n    }\n    if (!found) continue;\n    rawRows.push({ indikator: meta.indikator, wilayah_sumber: m.prov + '00', nilai: found.nilai, periode: found.periode });\n    regionPatches[m.regionCode] = regionPatches[m.regionCode] || {};\n    regionPatches[m.regionCode][meta.indikator] = transform(found.nilai, m.regionCode, meta.indikator, found.periode, meta.clamp);\n  }\n}\nreturn Object.entries(regionPatches).map(([code, patch]) => ({ json: { region_code: code, patch: { ...patch, source_updated_at: new Date().toISOString() }, raw: rawRows } }));"
+      },
+      "id": "polsim-bps-transform",
+      "name": "Transformasi Fiksi",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nkqfdrgggrdwzseglyjm.supabase.co/rest/v1/bps_raw_cache?on_conflict=indikator,wilayah_sumber,periode",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Profile", "value": "polsim" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.raw) }}",
+        "options": {}
+      },
+      "id": "polsim-bps-cache",
+      "name": "Supabase: Cache Mentah",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 0],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Supabase Service Role" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://nkqfdrgggrdwzseglyjm.supabase.co/rest/v1/regions?code=eq.{{ $('Transformasi Fiksi').item.json.region_code }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Profile", "value": "polsim" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Transformasi Fiksi').item.json.patch) }}",
+        "options": {}
+      },
+      "id": "polsim-bps-update",
+      "name": "Supabase: Update Regions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 0],
+      "credentials": {
+        "httpCustomAuth": { "id": null, "name": "PolSim Supabase Service Role" }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule mingguan (Senin 05:00)": {
+      "main": [[{ "node": "Daftar Indikator", "type": "main", "index": 0 }]]
+    },
+    "Daftar Indikator": { "main": [[{ "node": "BPS Web API", "type": "main", "index": 0 }]] },
+    "BPS Web API": { "main": [[{ "node": "Transformasi Fiksi", "type": "main", "index": 0 }]] },
+    "Transformasi Fiksi": { "main": [[{ "node": "Supabase: Cache Mentah", "type": "main", "index": 0 }]] },
+    "Supabase: Cache Mentah": { "main": [[{ "node": "Supabase: Update Regions", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {}
+}

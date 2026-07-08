@@ -1,0 +1,8 @@
+{
+  "_comment": "Nilai fallback fiksi-realistis per provinsi sumber, dipakai bila BPS Web API tidak tersedia (BPS_API_KEY kosong / endpoint berubah). Rentang mengikuti orde besaran statistik provinsi Indonesia terkini secara umum, bukan angka rilis resmi.",
+  "3100": { "ipm": 82.5, "gini_ratio": 0.43, "tingkat_pengangguran": 6.9 },
+  "3300": { "ipm": 73.4, "gini_ratio": 0.37, "tingkat_pengangguran": 5.1 },
+  "6400": { "ipm": 78.2, "gini_ratio": 0.33, "tingkat_pengangguran": 5.8 },
+  "7100": { "ipm": 74.2, "gini_ratio": 0.36, "tingkat_pengangguran": 6.6 },
+  "3400": { "ipm": 81.0, "gini_ratio": 0.44, "tingkat_pengangguran": 4.0 }
+}
