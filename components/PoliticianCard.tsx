@@ -1,5 +1,7 @@
 "use client";
 // Kartu tokoh composite-archetype + skor kompatibilitas sbg calon wakil.
+// Potret: /public/portraits/<code>.webp bila ada (di-generate AI); fallback teks.
+import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 export interface PoliticianRow {
@@ -56,6 +58,7 @@ export default function PoliticianCard({
   onSelect?: () => void;
 }) {
   const reduced = useReducedMotion();
+  const [hasPortrait, setHasPortrait] = useState(true);
   return (
     <motion.button
       onClick={onSelect}
@@ -64,6 +67,16 @@ export default function PoliticianCard({
         selected ? "ring-2 ring-amber-500" : ""
       } ${onSelect ? "" : "cursor-default"}`}
     >
+      {hasPortrait && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/portraits/${p.code}.webp`}
+          alt={p.portrait_description}
+          loading="lazy"
+          onError={() => setHasPortrait(false)}
+          className="h-36 w-full rounded-xl object-cover object-top"
+        />
+      )}
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-bold leading-tight">{p.name}</p>

@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import AuthGate from "@/components/AuthGate";
@@ -14,9 +15,27 @@ const STEPS = [
 export default function Home() {
   const { session, loading, campaign } = useGame();
   const reduced = useReducedMotion();
+  const [hasHero, setHasHero] = useState(true);
 
   return (
     <div className="space-y-10 py-6">
+      {hasHero && (
+        <motion.div
+          initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 1.02 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8 }}
+          className="overflow-hidden rounded-3xl shadow-elevate"
+        >
+          {/* hero art: /public/hero.webp (di-generate AI); disembunyikan bila belum ada */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/hero.webp"
+            alt="Panorama satire Republik Arcapada"
+            onError={() => setHasHero(false)}
+            className="max-h-72 w-full object-cover"
+          />
+        </motion.div>
+      )}
       <motion.section
         initial={reduced ? {} : { opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
